@@ -310,10 +310,13 @@
     var newAvg = newArea ? newAmount / newArea : 0;
     var cards = [
       ['新成交套数', newSold.length + '套'],
-      ['退房套数', returned.length + '套'],
-      ['新成交总价', fmtMoney(newAmount)],
-      ['新成交均价', newArea ? fmtPrice(newAvg) : '-']
-    ].map(function(c){ return '<div class="compare-card"><strong>'+c[1]+'</strong><span>'+c[0]+'</span></div>'; }).join('');
+      ['退房套数', returned.length + '套']
+    ];
+    if(!window.HIDE_PRICE_METRICS){
+      cards.push(['新成交总价', fmtMoney(newAmount)]);
+      cards.push(['新成交均价', newArea ? fmtPrice(newAvg) : '-']);
+    }
+    cards = cards.map(function(c){ return '<div class="compare-card"><strong>'+c[1]+'</strong><span>'+c[0]+'</span></div>'; }).join('');
     el.innerHTML =
       '<p class="hint">'+ cloudState.message +'</p>' +
       '<div class="compare-grid">'+cards+'</div>' +
