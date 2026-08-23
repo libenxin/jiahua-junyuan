@@ -101,6 +101,14 @@
     body.mobile-view .table-wrap{overflow:visible;max-height:none;border-radius:14px}
     body.mobile-view table{min-width:0;width:100%;table-layout:fixed;font-size:.74rem}
     body.mobile-view th,body.mobile-view td{padding:8px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+    .modal-mask{position:fixed;inset:0;background:rgba(23,32,51,.55);backdrop-filter:blur(4px);display:grid;place-items:center;z-index:9999;padding:20px}
+    .modal-box{background:var(--bg2);border-radius:24px;padding:32px 28px;max-width:420px;width:100%;box-shadow:0 30px 80px rgba(0,0,0,.3);text-align:center;position:relative;animation:modalIn .3s ease}
+    @keyframes modalIn{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none}}
+    .modal-box h3{font-size:1.4rem;margin:0 0 14px;color:var(--accent)}
+    .modal-box p{margin:0 0 22px;color:var(--muted);line-height:1.7;font-size:1rem}
+    .modal-box .vx{display:inline-block;background:var(--bg);border:1px solid var(--rule);border-radius:14px;padding:10px 18px;font-weight:900;color:var(--ink);font-size:1.1rem;letter-spacing:.05em;margin-bottom:22px}
+    .modal-close{border:0;border-radius:12px;background:var(--accent);color:white;padding:12px 28px;font-weight:900;font-size:1rem;cursor:pointer;width:100%}
+    .modal-close:hover{opacity:.92}
   </style>
 </head>
 <body>
@@ -172,5 +180,13 @@
   <script src="assets/project-data.js"></script>
   <script src="assets/supabase-config.js"></script>
   <script src="assets/charts.js"></script>
+  <div class="modal-mask" id="welcomeModal">
+    <div class="modal-box">
+      <h3>温馨提示</h3>
+      <p>此版本为基础版，仅显示每日成交房源，如需每日成交房源真实价格，请加vx：</p>
+      <div class="vx">keepchonging</div>
+      <button class="modal-close" type="button" onclick="document.getElementById('welcomeModal').style.display='none'">我知道了</button>
+    </div>
+  </div>
 </body>
 </html>
