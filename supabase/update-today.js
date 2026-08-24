@@ -31,15 +31,27 @@ function num(s) {
   return Number(String(s || '').replace(/,/g, '').trim());
 }
 
-async function fetchText(url) {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+async function fetchText(url, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`官网读取失败 ${res.status}: ${url}`);
+      return await res.text();
+    } catch (err) {
+      console.log(`第${i + 1}次尝试失败: ${err.message}`);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 5000 * (i + 1)));
+      else throw err;
     }
-  });
-  if (!res.ok) throw new Error(`官网读取失败 ${res.status}: ${url}`);
-  return await res.text();
+  }
 }
 
 function parseOverview(html) {
