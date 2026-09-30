@@ -1,5 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+let ProxyAgent = null;
+let undiciRequest = null;
+try {
+  ({ ProxyAgent, request: undiciRequest } = require('undici'));
+} catch (e) {
+  console.log('undici 未安装，Supabase 请求将使用原生 fetch（无代理）');
+}
 
 const projectDir = path.resolve(__dirname, '..');
 const root = path.resolve(projectDir, '..');
@@ -8,8 +15,12 @@ const zipPath = path.join(root, 'jiahua-junyuan-web.zip');
 const projectCode = 'jiahua_junyuan';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SECRET_KEY;
+const httpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
 
 if (!supabaseUrl || !supabaseKey) throw new Error('缺少 SUPABASE_URL 或 SUPABASE_SECRET_KEY');
+
+// 为 Supabase 请求创建代理 agent（仅用于 Supabase，官网抓取不走代理）
+const supabaseAgent = (ProxyAgent && httpsProxy) ? new ProxyAgent(httpsProxy) : null;
 
 global.window = {};
 eval(fs.readFileSync(dataPath, 'utf8'));
@@ -31,27 +42,52 @@ function num(s) {
   return Number(String(s || '').replace(/,/g, '').trim());
 }
 
-async function fetchText(url, retries = 3) {
+const BASE = 'http://bjjs.zjw.beijing.gov.cn';
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function fetchText(url, opts = {}) {
+  const retries = opts.retries || 5;
+  const minLen = opts.minLen || 20000;
+  const requireMarker = opts.requireMarker || null;
+  const label = opts.label || '';
   for (let i = 0; i < retries; i++) {
+    let html = null;
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 30000);
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-        },
-        signal: controller.signal
-      });
+      const headers = {
+        'User-Agent': CHROME_UA,
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      };
+      // 交替带/不带 Referer，绕过官网反爬
+      if (i % 2 === 1) headers['Referer'] = `${BASE}/eportal/ui?pageId=411612`;
+      const res = await fetch(url, { headers, signal: controller.signal });
       clearTimeout(timer);
-      if (!res.ok) throw new Error(`官网读取失败 ${res.status}: ${url}`);
-      return await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      html = await res.text();
     } catch (err) {
-      console.log(`第${i + 1}次尝试失败: ${err.message}`);
-      if (i < retries - 1) await new Promise(r => setTimeout(r, 5000 * (i + 1)));
-      else throw err;
+      console.log(`    [${label}第${i + 1}次] 异常: ${err.message}`);
+      if (i < retries - 1) { await sleep(500 + i * 500); continue; }
+      throw err;
     }
+    if (html.length < minLen) {
+      console.log(`    [${label}第${i + 1}次] 内容过短(${html.length}B)，疑似限流`);
+      if (i < retries - 1) { await sleep(500 + i * 500); continue; }
+      throw new Error(`[${label}] 内容过短(${html.length}B)，疑似限流`);
+    }
+    if (requireMarker && html.indexOf(requireMarker) < 0) {
+      console.log(`    [${label}第${i + 1}次] 缺标记(${html.length}B)，疑似限流`);
+      if (i < retries - 1) { await sleep(500 + i * 500); continue; }
+      throw new Error(`[${label}] 缺标记 ${requireMarker}，疑似限流`);
+    }
+    return html;
   }
+  throw new Error(`[${label}] 重试 ${retries} 次后仍未获取到有效内容`);
 }
 
 function parseOverview(html) {
@@ -97,7 +133,30 @@ function headers(extra = {}) {
 }
 
 async function request(pathname, options = {}) {
-  const res = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/rest/v1/${pathname}`, options);
+  const url = `${supabaseUrl.replace(/\/+$/, '')}/rest/v1/${pathname}`;
+  if (undiciRequest && supabaseAgent) {
+    const reqOptions = {
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      dispatcher: supabaseAgent
+    };
+    if (options.body) reqOptions.body = options.body;
+    const { statusCode, headers, body } = await undiciRequest(url, reqOptions);
+    const text = await body.text();
+    if (statusCode >= 400) {
+      throw new Error(`${pathname} 请求失败：${statusCode} ${text}`);
+    }
+    return {
+      ok: statusCode < 400,
+      status: statusCode,
+      headers: {
+        get(name) { return headers[name.toLowerCase()] || null; }
+      },
+      text() { return Promise.resolve(text); },
+      json() { return Promise.resolve(JSON.parse(text)); }
+    };
+  }
+  const res = await fetch(url, options);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`${pathname} 请求失败：${res.status} ${text}`);
@@ -131,7 +190,7 @@ async function countRows(table, query) {
 
 (async () => {
   console.log('读取项目概览...');
-  const projectHtml = await fetchText(data.project.sourceUrl);
+  const projectHtml = await fetchText(data.project.sourceUrl, { retries: 8, minLen: 5000, requireMarker: '住宅', label: '项目概览' });
   const parsedProject = parseOverview(projectHtml);
   data.project.overview = parsedProject.overview;
   data.project.extractedAt = parsedProject.extractedAt;
@@ -143,7 +202,7 @@ async function countRows(table, query) {
   let missing = 0;
   for (const building of data.buildings) {
     console.log('读取楼栋 ' + building.name);
-    const html = await fetchText(building.url);
+    const html = await fetchText(building.url, { minLen: 20000, label: building.name });
     const statusMap = parseStatuses(html);
     const isSingleUnit = new Set(building.houses.map(function(h){ return h.unit; })).size === 1;
     for (const house of building.houses) {
