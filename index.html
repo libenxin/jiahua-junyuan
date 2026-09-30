@@ -101,9 +101,31 @@
     body.mobile-view .table-wrap{overflow:visible;max-height:none;border-radius:14px}
     body.mobile-view table{min-width:0;width:100%;table-layout:fixed;font-size:.74rem}
     body.mobile-view th,body.mobile-view td{padding:8px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+    .migration-mask{position:fixed;inset:0;background:rgba(23,32,51,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px}
+    .migration-dialog{background:var(--bg2);border:1px solid var(--rule);border-radius:24px;box-shadow:0 24px 64px var(--shadow);max-width:440px;width:100%;padding:30px 28px;text-align:center}
+    .migration-dialog .m-emoji{font-size:2.6rem;line-height:1}
+    .migration-dialog h2{margin:14px 0 8px;font-size:1.4rem}
+    .migration-dialog p{color:var(--muted);margin:0 0 6px;font-size:.95rem}
+    .migration-dialog .m-url{display:block;color:var(--accent);font-weight:800;font-size:1.02rem;word-break:break-all;margin:10px 0 20px}
+    .migration-dialog .m-actions{display:flex;gap:10px;justify-content:center}
+    .migration-dialog .btn{flex:1;text-align:center;text-decoration:none;padding:11px 14px}
+    .migration-dialog .btn.ghost{background:var(--bg);color:var(--muted);border:1px solid var(--rule)}
+    body.mobile-view .migration-dialog{padding:22px 18px;border-radius:18px}
   </style>
 </head>
 <body>
+  <div class="migration-mask" id="migrationMask" hidden>
+    <div class="migration-dialog" role="dialog" aria-modal="true" aria-labelledby="migrationTitle">
+      <div class="m-emoji">🏠</div>
+      <h2 id="migrationTitle">本站已迁移</h2>
+      <p>嘉华珺园签约监测已迁移至新网址，请收藏新地址查看最新数据：</p>
+      <a class="m-url" href="https://libenxin.github.io/beijing-housing/" target="_blank" rel="noopener">https://libenxin.github.io/beijing-housing/</a>
+      <div class="m-actions">
+        <button class="btn ghost" type="button" id="migrationClose">暂不前往</button>
+        <a class="btn" href="https://libenxin.github.io/beijing-housing/" target="_blank" rel="noopener">前往新网址</a>
+      </div>
+    </div>
+  </div>
   <main class="page">
     <nav class="view-switch" aria-label="页面版本选择">
       <div class="view-switch-inner">
@@ -172,5 +194,22 @@
   <script src="assets/project-data.js"></script>
   <script src="assets/supabase-config.js"></script>
   <script src="assets/charts.js"></script>
+  <script>
+    (function () {
+      var mask = document.getElementById('migrationMask');
+      var closeBtn = document.getElementById('migrationClose');
+      if (!mask || !closeBtn) return;
+      function show() { mask.hidden = false; }
+      function hide() {
+        mask.hidden = true;
+        try { localStorage.setItem('jiahua_migration_dismissed', '1'); } catch (e) {}
+      }
+      closeBtn.addEventListener('click', hide);
+      mask.addEventListener('click', function (e) { if (e.target === mask) hide(); });
+      try {
+        if (!localStorage.getItem('jiahua_migration_dismissed')) show();
+      } catch (e) { show(); }
+    })();
+  </script>
 </body>
 </html>
